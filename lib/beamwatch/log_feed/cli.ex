@@ -1,6 +1,8 @@
 defmodule BeamWatch.LogFeed.CLI do
   @moduledoc false
 
+  @dialyzer {:no_return, abort: 1}
+
   alias BeamWatch.LogFeed.Profiles
   alias BeamWatch.LogFeed.Runner
 

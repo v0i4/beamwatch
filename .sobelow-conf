@@ -1,0 +1,11 @@
+[
+  verbose: true,
+  private: true,
+  skip: false,
+  router: nil,
+  exit: "low",
+  format: "txt",
+  threshold: "low",
+  ignore: ["Config.CSP", "Traversal.FileModule"],
+  ignore_files: []
+]
