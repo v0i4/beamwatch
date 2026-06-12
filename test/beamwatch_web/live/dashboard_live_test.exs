@@ -221,8 +221,8 @@ defmodule BeamWatchWeb.DashboardLiveTest do
     assert html =~ "Container Restart Loop"
 
     view
-    |> element(~s|input[type="checkbox"][phx-value-value="active"]|)
-    |> render_click()
+    |> element(~s|form[phx-change="filter-changed"]|)
+    |> render_change(%{"filter" => %{"status" => ["active"]}})
 
     Process.sleep(100)
 
@@ -236,8 +236,8 @@ defmodule BeamWatchWeb.DashboardLiveTest do
     refute html =~ "Clear all filters"
 
     view
-    |> element(~s|input[type="checkbox"][phx-value-value="active"]|)
-    |> render_click()
+    |> element(~s|form[phx-change="filter-changed"]|)
+    |> render_change(%{"filter" => %{"status" => ["active"]}})
 
     Process.sleep(100)
 
@@ -249,8 +249,8 @@ defmodule BeamWatchWeb.DashboardLiveTest do
     {:ok, view, _html} = live(conn, ~p"/")
 
     view
-    |> element(~s|input[type="checkbox"][phx-value-value="active"]|)
-    |> render_click()
+    |> element(~s|form[phx-change="filter-changed"]|)
+    |> render_change(%{"filter" => %{"status" => ["active"]}})
 
     Process.sleep(100)
 

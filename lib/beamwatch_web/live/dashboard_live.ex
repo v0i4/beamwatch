@@ -144,19 +144,14 @@ defmodule BeamWatchWeb.DashboardLive do
     end
   end
 
-  def handle_event("toggle-filter", %{"filter" => filter_type, "value" => value}, socket) do
-    filters = socket.assigns.filters
-    filter_type_atom = String.to_existing_atom(filter_type)
-    current_values = Map.get(filters, filter_type_atom, [])
+  def handle_event("filter-changed", %{"filter" => params}, socket) do
+    filters = %{
+      status: parse_filter_list(params["status"]),
+      severity: parse_filter_list(params["severity"]),
+      type: parse_filter_list(params["type"])
+    }
 
-    new_values =
-      if value in current_values do
-        List.delete(current_values, value)
-      else
-        [value | current_values]
-      end
-
-    {:noreply, assign(socket, filters: Map.put(filters, filter_type_atom, new_values))}
+    {:noreply, assign(socket, filters: filters)}
   end
 
   def handle_event("clear-filters", _params, socket) do
@@ -255,62 +250,63 @@ defmodule BeamWatchWeb.DashboardLive do
   defp filter_panel(assigns) do
     ~H"""
     <div class="space-y-6 mb-6">
-      <!-- Status Filter -->
-      <div>
-        <h3 class="text-sm font-medium text-gray-700 mb-2">Status</h3>
-        <div class="space-y-1">
-          <label
-            :for={status <- [:active, :acknowledged, :silenced, :resolved]}
-            class="flex items-center gap-2 cursor-pointer"
-          >
-            <input
-              type="checkbox"
-              checked={status in @filters.status}
-              phx-click="toggle-filter"
-              phx-value-filter="status"
-              phx-value-value={status}
-              class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-            />
-            <span class="text-sm text-gray-600">{status |> to_string() |> String.capitalize()}</span>
-          </label>
+      <.form for={%{}} phx-change="filter-changed" class="space-y-6">
+        <!-- Status Filter -->
+        <div>
+          <h3 class="text-sm font-medium text-gray-700 mb-2">Status</h3>
+          <div class="space-y-1">
+            <label
+              :for={status <- [:active, :acknowledged, :silenced, :resolved]}
+              class="flex items-center gap-2 cursor-pointer"
+            >
+              <input
+                type="checkbox"
+                name="filter[status][]"
+                value={status}
+                checked={status in @filters.status}
+                class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+              />
+              <span class="text-sm text-gray-600">
+                {status |> to_string() |> String.capitalize()}
+              </span>
+            </label>
+          </div>
         </div>
-      </div>
-      
+        
     <!-- Severity Filter -->
-      <div>
-        <h3 class="text-sm font-medium text-gray-700 mb-2">Severity</h3>
-        <div class="space-y-1">
-          <label :for={severity <- [:high, :medium]} class="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={severity in @filters.severity}
-              phx-click="toggle-filter"
-              phx-value-filter="severity"
-              phx-value-value={severity}
-              class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-            />
-            <span class="text-sm text-gray-600">{severity |> to_string() |> String.upcase()}</span>
-          </label>
+        <div>
+          <h3 class="text-sm font-medium text-gray-700 mb-2">Severity</h3>
+          <div class="space-y-1">
+            <label :for={severity <- [:high, :medium]} class="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                name="filter[severity][]"
+                value={severity}
+                checked={severity in @filters.severity}
+                class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+              />
+              <span class="text-sm text-gray-600">{severity |> to_string() |> String.upcase()}</span>
+            </label>
+          </div>
         </div>
-      </div>
-      
+        
     <!-- Type Filter -->
-      <div>
-        <h3 class="text-sm font-medium text-gray-700 mb-2">Incident Type</h3>
-        <div class="space-y-1">
-          <label :for={type <- incident_types()} class="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={type in @filters.type}
-              phx-click="toggle-filter"
-              phx-value-filter="type"
-              phx-value-value={type}
-              class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-            />
-            <span class="text-sm text-gray-600">{incident_type_name(type)}</span>
-          </label>
+        <div>
+          <h3 class="text-sm font-medium text-gray-700 mb-2">Incident Type</h3>
+          <div class="space-y-1">
+            <label :for={type <- incident_types()} class="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                name="filter[type][]"
+                value={type}
+                checked={type in @filters.type}
+                class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+              />
+              <span class="text-sm text-gray-600">{incident_type_name(type)}</span>
+            </label>
+          </div>
         </div>
-      </div>
+      </.form>
     </div>
     """
   end
@@ -850,6 +846,17 @@ defmodule BeamWatchWeb.DashboardLive do
 
   defp count_active_in_type(incidents) do
     Enum.count(incidents, fn i -> i.status == :active end)
+  end
+
+  defp parse_filter_list(nil), do: []
+  defp parse_filter_list([]), do: []
+
+  defp parse_filter_list(values) when is_list(values) do
+    Enum.map(values, fn
+      v when v in ["active", "acknowledged", "silenced", "resolved"] -> String.to_existing_atom(v)
+      v when v in ["high", "medium"] -> String.to_existing_atom(v)
+      v -> String.to_existing_atom(v)
+    end)
   end
 
   defp get_filtered_incidents(incidents, filters) do
