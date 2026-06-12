@@ -256,7 +256,7 @@ defmodule BeamWatchWeb.DashboardLive do
   defp filter_panel(assigns) do
     ~H"""
     <div class="space-y-6 mb-6">
-      <.form for={%{}} phx-change="filter-changed" class="space-y-6">
+      <.form for={%{}} as={:filter} phx-change="filter-changed" class="space-y-6">
         <!-- Status Filter -->
         <div>
           <h3 class="text-sm font-medium text-gray-700 mb-2">Status</h3>
