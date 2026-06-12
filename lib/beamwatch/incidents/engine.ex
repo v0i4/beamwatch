@@ -25,12 +25,17 @@ defmodule BeamWatch.Incidents.Engine do
 
   require Logger
 
+  alias BeamWatch.Incidents.Detectors.ContainerRestartLoop
+  alias BeamWatch.Incidents.Detectors.DiskSmartWarning
+  alias BeamWatch.Incidents.Detectors.SharePermissionFailure
+  alias BeamWatch.Incidents.Detectors.VMBootFailure
   alias BeamWatch.Incidents.{Incident, Silence}
 
   @pubsub BeamWatch.PubSub
   @topic_events "beamwatch:events"
   @topic_updates "beamwatch:state"
   @max_recent_activity 200
+  @detectors [ContainerRestartLoop, DiskSmartWarning, SharePermissionFailure, VMBootFailure]
 
   # ------------------------------------------------------------------
   # API
@@ -93,17 +98,19 @@ defmodule BeamWatch.Incidents.Engine do
   # ------------------------------------------------------------------
 
   @impl true
-  def init(_opts) do
-    :ok = Phoenix.PubSub.subscribe(@pubsub, @topic_events)
+  def init(opts) do
+    pubsub = Keyword.get(opts, :pubsub, @pubsub)
+    :ok = Phoenix.PubSub.subscribe(pubsub, @topic_events)
 
     state = %{
       incidents: %{},
       silences: %{},
       recent_activity: [],
-      detector_scratch: %{}
+      detector_scratch: %{},
+      pubsub: pubsub
     }
 
-    broadcast_update()
+    broadcast_update(state)
     {:ok, state}
   end
 
@@ -111,7 +118,7 @@ defmodule BeamWatch.Incidents.Engine do
   def handle_info({:beamwatch, :event, event}, state) do
     state = push_activity(state, {:event, event})
     state = apply_detectors(state, event)
-    broadcast_update()
+    broadcast_update(state)
     {:noreply, state}
   end
 
@@ -136,7 +143,7 @@ defmodule BeamWatch.Incidents.Engine do
       incident ->
         updated = %{incident | status: :acknowledged}
         state = put_incident(state, updated)
-        broadcast_update()
+        broadcast_update(state)
         {:noreply, state}
     end
   end
@@ -158,7 +165,7 @@ defmodule BeamWatch.Incidents.Engine do
         state
       end
 
-    broadcast_update()
+    broadcast_update(state)
     {:noreply, state}
   end
 
@@ -172,7 +179,7 @@ defmodule BeamWatch.Incidents.Engine do
       incident ->
         updated = %{incident | status: :resolved}
         state = put_incident(state, updated)
-        broadcast_update()
+        broadcast_update(state)
         {:noreply, state}
     end
   end
@@ -193,7 +200,7 @@ defmodule BeamWatch.Incidents.Engine do
         state
       end
 
-    broadcast_update()
+    broadcast_update(state)
     {:noreply, state}
   end
 
@@ -210,12 +217,13 @@ defmodule BeamWatch.Incidents.Engine do
     %{state | incidents: Map.put(state.incidents, incident.id, incident)}
   end
 
-  defp apply_detectors(state, _event) do
-    # Detectors will be wired in Phase 4.
-    state
+  defp apply_detectors(state, event) do
+    Enum.reduce(@detectors, state, fn detector, acc ->
+      detector.detect(acc, event)
+    end)
   end
 
-  defp broadcast_update do
-    Phoenix.PubSub.broadcast(@pubsub, @topic_updates, {:beamwatch, :updated})
+  defp broadcast_update(state) do
+    Phoenix.PubSub.broadcast(state.pubsub, @topic_updates, {:beamwatch, :updated})
   end
 end
