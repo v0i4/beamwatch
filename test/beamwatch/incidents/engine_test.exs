@@ -82,6 +82,50 @@ defmodule BeamWatch.Incidents.EngineTest do
     end
   end
 
+  describe "engine lifecycle" do
+    test "starts with empty state", %{pubsub_name: pubsub_name} do
+      {:ok, pid} =
+        Engine.start_link(
+          pubsub: pubsub_name,
+          # credo:disable-for-this-line
+          name: :"engine_test_#{System.unique_integer([:positive])}"
+        )
+
+      snapshot = Engine.snapshot(pid)
+      assert snapshot.incidents == %{}
+      assert snapshot.silences == %{}
+      assert snapshot.recent_activity == []
+    end
+
+    test "clear/1 resets all state", %{pubsub_name: pubsub_name} do
+      {:ok, pid} =
+        Engine.start_link(
+          pubsub: pubsub_name,
+          # credo:disable-for-this-line
+          name: :"engine_test_#{System.unique_integer([:positive])}"
+        )
+
+      events = validation_events()
+
+      Enum.each(events, fn event ->
+        Phoenix.PubSub.broadcast(pubsub_name, @topic_events, {:beamwatch, :event, event})
+        Process.sleep(5)
+      end)
+
+      Process.sleep(20)
+      snapshot = Engine.snapshot(pid)
+      assert map_size(snapshot.incidents) == 4
+
+      :ok = Engine.clear(pid)
+      Process.sleep(5)
+
+      snapshot = Engine.snapshot(pid)
+      assert snapshot.incidents == %{}
+      assert snapshot.silences == %{}
+      assert snapshot.recent_activity == []
+    end
+  end
+
   describe "operator actions" do
     test "acknowledge changes incident status", %{pubsub_name: pubsub_name} do
       {:ok, pid} =
@@ -251,6 +295,68 @@ defmodule BeamWatch.Incidents.EngineTest do
       assert snapshot.incidents[id].status == :active
       assert snapshot.incidents[id].silenced? == false
       refute Map.has_key?(snapshot.silences, {:incident, id})
+    end
+
+    test "acknowledge on non-existent incident is silently ignored", %{pubsub_name: pubsub_name} do
+      {:ok, pid} =
+        Engine.start_link(
+          pubsub: pubsub_name,
+          # credo:disable-for-this-line
+          name: :"engine_test_#{System.unique_integer([:positive])}"
+        )
+
+      assert :ok = Engine.acknowledge(pid, {:nonexistent, "foo"})
+      Process.sleep(5)
+
+      snapshot = Engine.snapshot(pid)
+      assert snapshot.incidents == %{}
+    end
+
+    test "resolve on non-existent incident is silently ignored", %{pubsub_name: pubsub_name} do
+      {:ok, pid} =
+        Engine.start_link(
+          pubsub: pubsub_name,
+          # credo:disable-for-this-line
+          name: :"engine_test_#{System.unique_integer([:positive])}"
+        )
+
+      assert :ok = Engine.resolve(pid, {:nonexistent, "foo"})
+      Process.sleep(5)
+
+      snapshot = Engine.snapshot(pid)
+      assert snapshot.incidents == %{}
+    end
+
+    test "silence on non-existent incident does not crash", %{pubsub_name: pubsub_name} do
+      {:ok, pid} =
+        Engine.start_link(
+          pubsub: pubsub_name,
+          # credo:disable-for-this-line
+          name: :"engine_test_#{System.unique_integer([:positive])}"
+        )
+
+      assert :ok = Engine.silence(pid, :incident, {:nonexistent, "foo"})
+      Process.sleep(5)
+
+      snapshot = Engine.snapshot(pid)
+      assert Map.has_key?(snapshot.silences, {:incident, {:nonexistent, "foo"}})
+    end
+
+    test "clear_silence on non-existent silence is silently ignored", %{
+      pubsub_name: pubsub_name
+    } do
+      {:ok, pid} =
+        Engine.start_link(
+          pubsub: pubsub_name,
+          # credo:disable-for-this-line
+          name: :"engine_test_#{System.unique_integer([:positive])}"
+        )
+
+      assert :ok = Engine.clear_silence(pid, :incident, {:nonexistent, "foo"})
+      Process.sleep(5)
+
+      snapshot = Engine.snapshot(pid)
+      refute Map.has_key?(snapshot.silences, {:incident, {:nonexistent, "foo"}})
     end
 
     test "clear_silence for type restores all incidents of that type to active", %{

@@ -168,19 +168,30 @@ defmodule BeamWatchWeb.DashboardLiveTest do
     assert %{status: :silenced} = snapshot.incidents[{:container_restart_loop, "plex"}]
   end
 
-  test "dev controls append validation logs and clear the log directory", %{
-    conn: conn,
-    target: target
-  } do
+  test "toggle-evidence expands and hides evidence pane", %{conn: conn} do
+    feed_container_restart_events("plex")
     {:ok, view, html} = live(conn, ~p"/")
+    Process.sleep(50)
 
-    assert html =~ "Dev log controls"
-    assert render_click(element(view, "button", "Add validation logs")) =~ "Added"
-    assert File.read!(Path.join(target, "docker.log")) =~ "container=plex event=die"
-    assert File.read!(Path.join(target, "smb.log")) =~ "Permission denied share=media"
+    assert html =~ "Show evidence"
 
-    assert render_click(element(view, "button", "Clear log dir")) =~ "Cleared"
-    assert File.ls!(target) == []
+    view |> element("button", "Show evidence") |> render_click()
+    Process.sleep(50)
+
+    html = render(view)
+    assert html =~ "Hide evidence"
+  end
+
+  test "Recent activity panel renders with placeholder text when empty", %{conn: conn} do
+    {:ok, _view, html} = live(conn, ~p"/")
+    assert html =~ "Recent activity"
+    assert html =~ "No recent activity"
+  end
+
+  test "starter shell panel renders", %{conn: conn} do
+    {:ok, _view, html} = live(conn, ~p"/")
+    assert html =~ "BeamWatch"
+    assert html =~ "Live incident triage"
   end
 
   defp feed_container_restart_events(container) do
