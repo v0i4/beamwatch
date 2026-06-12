@@ -2,9 +2,9 @@
 
 ## Summary
 
-**Date:** 2026-06-11
-**Branch:** phase-7
-**Test count:** 131 tests, 0 failures
+**Date:** 2026-06-12
+**Branch:** feature/ui-ux-improvements
+**Test count:** 136 tests, 0 failures
 **Quality gate:** compile (no warnings), format, credo (0 issues), ex_dna (0 dupes), sobelow (clean), dialyzer (passes)
 
 ---
@@ -18,13 +18,13 @@
 | Engine | 18 | `engine_test.exs` |
 | Watcher | 10 | `watcher_test.exs` |
 | Log feed | 18 | `log_feed_test.exs`, `cli_test.exs`, `runner_test.exs` |
-| Dashboard LiveView | 14 | `dashboard_live_test.exs` |
+| Dashboard LiveView | 20 | `dashboard_live_test.exs` |
 | Controllers | 4 | `page_controller_test.exs`, `error_*_test.exs` |
 | Other | 3 | `application_test.exs`, `telemetry_test.exs`, `beamwatch_web_test.exs` |
-| **Incident struct** | **9** | `incident_test.exs` (new) |
-| **Silence struct** | **3** | `silence_test.exs` (new) |
-| **SourceHealth** | **5** | `source_health_test.exs` (new) |
-| **Event struct** | **4** | `event_test.exs` (new) |
+| **Incident struct** | **9** | `incident_test.exs` |
+| **Silence struct** | **3** | `silence_test.exs` |
+| **SourceHealth** | **5** | `source_health_test.exs` |
+| **Event struct** | **4** | `event_test.exs` |
 
 ---
 
@@ -95,6 +95,13 @@
 | Recent activity feed | ✅ | Empty state tested |
 | Dev controls panel | ✅ | Add validation logs + Clear log dir |
 | Starter shell panel | ✅ | Render verified |
+| **Sidebar filter panel** | ✅ | Status/severity/type checkboxes |
+| **Incident type sections** | ✅ | Collapsible sections with counts |
+| **Enhanced incident cards** | ✅ | Color-coded badges, timestamps, resource names |
+| **Source health table** | ✅ | Status/size/offset/failures/rotations columns |
+| **Activity type labels** | ✅ | Color-coded badges per log source |
+| **Quick actions panel** | ✅ | Bulk acknowledge/resolve/silence visible |
+| **Keyboard shortcut hint** | ✅ | `?` key hint rendered |
 
 ---
 
