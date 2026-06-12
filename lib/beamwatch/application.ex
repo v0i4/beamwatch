@@ -11,6 +11,7 @@ defmodule BeamWatch.Application do
       BeamWatchWeb.Telemetry,
       {DNSCluster, query: Application.get_env(:beamwatch, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: BeamWatch.PubSub},
+      {BeamWatch.Incidents.Engine, []},
       {BeamWatch.Ingest.Watcher, []},
       # Start to serve requests, typically the last entry
       BeamWatchWeb.Endpoint
