@@ -41,6 +41,9 @@ beamwatch-*.tar
 /.elixir_ls/
 /.lexical/
 
+# Log files
+/priv/logs/
+
 # Version managers
 .tool-versions
 .mise.toml
