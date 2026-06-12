@@ -169,18 +169,7 @@ defmodule BeamWatch.Incidents.Engine do
     silence = Silence.new(scope, key)
     silences = Map.put(state.silences, {scope, key}, silence)
     state = %{state | silences: silences}
-
-    # If silencing a specific incident, update its silenced? flag.
-    state =
-      if scope == :incident do
-        case Map.get(state.incidents, key) do
-          nil -> state
-          incident -> put_incident(state, %{incident | silenced?: true})
-        end
-      else
-        state
-      end
-
+    state = apply_silence(state, scope, key)
     broadcast_update(state)
     {:noreply, state}
   end
@@ -204,18 +193,7 @@ defmodule BeamWatch.Incidents.Engine do
   def handle_cast({:clear_silence, scope, key}, state) do
     silences = Map.delete(state.silences, {scope, key})
     state = %{state | silences: silences}
-
-    # If clearing an incident silence, restore its silenced? flag.
-    state =
-      if scope == :incident do
-        case Map.get(state.incidents, key) do
-          nil -> state
-          incident -> put_incident(state, %{incident | silenced?: false})
-        end
-      else
-        state
-      end
-
+    state = clear_silence_from_incidents(state, scope, key)
     broadcast_update(state)
     {:noreply, state}
   end
@@ -231,6 +209,40 @@ defmodule BeamWatch.Incidents.Engine do
 
   defp put_incident(state, incident) do
     %{state | incidents: Map.put(state.incidents, incident.id, incident)}
+  end
+
+  defp apply_silence(state, :incident, key) do
+    case Map.get(state.incidents, key) do
+      nil -> state
+      incident -> put_incident(state, %{incident | silenced?: true, status: :silenced})
+    end
+  end
+
+  defp apply_silence(state, :type, type) do
+    Enum.reduce(state.incidents, state, fn {_id, incident}, acc ->
+      if incident.type == type do
+        put_incident(acc, %{incident | silenced?: true, status: :silenced})
+      else
+        acc
+      end
+    end)
+  end
+
+  defp clear_silence_from_incidents(state, :incident, key) do
+    case Map.get(state.incidents, key) do
+      nil -> state
+      incident -> put_incident(state, %{incident | silenced?: false, status: :active})
+    end
+  end
+
+  defp clear_silence_from_incidents(state, :type, type) do
+    Enum.reduce(state.incidents, state, fn {_id, incident}, acc ->
+      if incident.type == type do
+        put_incident(acc, %{incident | silenced?: false, status: :active})
+      else
+        acc
+      end
+    end)
   end
 
   defp apply_detectors(state, event) do

@@ -95,6 +95,79 @@ defmodule BeamWatchWeb.DashboardLiveTest do
     assert Map.has_key?(snapshot.silences, {:type, :container_restart_loop})
   end
 
+  test "clear-silence from incident action buttons removes silence and restores status",
+       %{conn: conn} do
+    feed_container_restart_events("plex")
+    {:ok, view, _html} = live(conn, ~p"/")
+    Process.sleep(50)
+
+    view |> element("button", "Silence this") |> render_click()
+    Process.sleep(100)
+
+    snapshot = Engine.snapshot()
+    assert snapshot.incidents[{:container_restart_loop, "plex"}].silenced?
+
+    view |> element("button", "Clear silence") |> render_click()
+    Process.sleep(100)
+
+    snapshot = Engine.snapshot()
+    refute snapshot.incidents[{:container_restart_loop, "plex"}].silenced?
+    assert snapshot.incidents[{:container_restart_loop, "plex"}].status == :active
+    refute Map.has_key?(snapshot.silences, {:incident, {:container_restart_loop, "plex"}})
+  end
+
+  test "silences panel renders with Clear button after silence-type action", %{conn: conn} do
+    feed_container_restart_events("plex")
+    {:ok, view, _html} = live(conn, ~p"/")
+    Process.sleep(50)
+
+    view |> element("button", "Silence type") |> render_click()
+    Process.sleep(100)
+
+    html = render(view)
+
+    assert html =~ "Silences"
+    assert html =~ "Container Restart Loop"
+    assert html =~ "Clear"
+
+    on_exit(fn ->
+      Engine.clear_silence(:type, :container_restart_loop)
+    end)
+  end
+
+  test "clear-silence from silences panel removes type silence", %{conn: conn} do
+    feed_container_restart_events("plex")
+    {:ok, view, _html} = live(conn, ~p"/")
+    Process.sleep(50)
+
+    view |> element("button", "Silence type") |> render_click()
+    Process.sleep(100)
+
+    html = render(view)
+    assert html =~ "Silences"
+
+    view
+    |> element(~s|button[phx-click="clear-silence"][phx-value-scope="type"]|, "Clear")
+    |> render_click()
+
+    Process.sleep(100)
+
+    snapshot = Engine.snapshot()
+    refute Map.has_key?(snapshot.silences, {:type, :container_restart_loop})
+  end
+
+  test "silence-incident action sets incident status to silenced", %{conn: conn} do
+    feed_container_restart_events("plex")
+    {:ok, view, _html} = live(conn, ~p"/")
+    Process.sleep(50)
+
+    view |> element("button", "Silence this") |> render_click()
+    Process.sleep(100)
+
+    snapshot = Engine.snapshot()
+    assert %{status: :silenced} = snapshot.incidents[{:container_restart_loop, "plex"}]
+  end
+
   test "dev controls append validation logs and clear the log directory", %{
     conn: conn,
     target: target
