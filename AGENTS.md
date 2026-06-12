@@ -17,7 +17,7 @@ mix test
 |---------|---------|
 | `mix beamwatch.feed_logs --profile validation --target priv/logs` | Generate deterministic fixture logs |
 | `mix beamwatch.feed_logs --profile validation --target priv/logs --speed 20` | Same, faster |
-| `mix precommit` | `compile --warnings-as-errors` + `deps.unlock --unused` + `format` + `test` |
+| `mix precommit` | Full quality gate: `compile --warnings-as-errors` → `deps.unlock --unused` → `format --check-formatted` → `credo --strict` → `ex_dna` → `sobelow --exit` → `dialyzer` → `coveralls` |
 | `docker compose up log-environment` | Optional long-running log generator with rotation |
 
 ## Architecture
@@ -43,3 +43,6 @@ mix test
 - Default log directory: `priv/logs/` (gitignored)
 - Elixir `~> 1.20` (use `mise install` to get the pinned runtime)
 - No CI workflows, no pre-commit hooks config in repo
+- **First `mix dialyzer` builds a PLT (minutes, one-time)**, cached in `priv/plts/`
+- **Coverage threshold is strict: 80%** — current starter shell is at ~50%, so `precommit` will fail on coverage until tests are added
+- **Sobelow** flags CSP absence in `router.ex` and directory traversal in `lib/beamwatch/log_feed/` — these are expected on a starter shell; triage or configure `.sobelow-conf` to suppress

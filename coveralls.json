@@ -1,0 +1,6 @@
+{
+  "skip_files": [
+    "lib/beamwatch_web/components/core_components.ex"
+  ],
+  "minimum_coverage": 80
+}
