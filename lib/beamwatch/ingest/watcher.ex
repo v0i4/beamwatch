@@ -32,6 +32,7 @@ defmodule BeamWatch.Ingest.Watcher do
   require Logger
 
   alias BeamWatch.Ingest.{Event, Parser, SourceHealth}
+  alias BeamWatch.LogFeed.DevControls
 
   @default_reconcile_interval 2_000
   @pubsub_events "beamwatch:events"
@@ -85,7 +86,7 @@ defmodule BeamWatch.Ingest.Watcher do
 
   @impl true
   def init(opts) do
-    dir = Keyword.get(opts, :dir, BeamWatch.LogFeed.DevControls.target_dir())
+    dir = Keyword.get(opts, :dir, DevControls.target_dir())
     reconcile_interval = Keyword.get(opts, :reconcile_interval, @default_reconcile_interval)
 
     fs_pid = start_fs(dir)
@@ -191,26 +192,7 @@ defmodule BeamWatch.Ingest.Watcher do
         |> Enum.map(&Path.basename/1)
         |> Enum.reduce(%{}, fn source, acc ->
           path = Path.join(dir, source)
-
-          case File.stat(path) do
-            {:ok, %{size: size}} ->
-              health = %SourceHealth{
-                source: source,
-                exists?: true,
-                size: size,
-                offset: size,
-                last_read_at: DateTime.utc_now(),
-                parse_failures: 0,
-                malformed_samples: [],
-                rotations: 0,
-                truncated?: false
-              }
-
-              Map.put(acc, source, health)
-
-            {:error, _} ->
-              acc
-          end
+          discover_file(path, source, acc)
         end)
 
       {:error, _} ->
@@ -218,8 +200,36 @@ defmodule BeamWatch.Ingest.Watcher do
     end
   end
 
+  defp discover_file(path, source, acc) do
+    case File.stat(path) do
+      {:ok, %{size: size}} ->
+        health = %SourceHealth{
+          source: source,
+          exists?: true,
+          size: size,
+          offset: size,
+          last_read_at: DateTime.utc_now(),
+          parse_failures: 0,
+          malformed_samples: [],
+          rotations: 0,
+          truncated?: false
+        }
+
+        Map.put(acc, source, health)
+
+      {:error, _} ->
+        acc
+    end
+  end
+
   defp do_reconcile(state) do
-    # Ensure the directory exists; if it doesn't, try to re-watch later.
+    state = ensure_fs_pid(state)
+    sources = reconcile_tracked_sources(state)
+    sources = discover_new_sources(state, sources)
+    %{state | sources: sources}
+  end
+
+  defp ensure_fs_pid(state) do
     fs_pid =
       if state.fs_pid == nil and File.dir?(state.dir) do
         start_fs(state.dir)
@@ -227,69 +237,80 @@ defmodule BeamWatch.Ingest.Watcher do
         state.fs_pid
       end
 
-    state = %{state | fs_pid: fs_pid}
+    %{state | fs_pid: fs_pid}
+  end
 
-    # Re-scan all tracked files.
-    sources =
-      Enum.reduce(state.sources, state.sources, fn {source, health}, acc ->
-        path = Path.join(state.dir, source)
-        {_, new_health} = process_file(source, path, health)
-        Map.put(acc, source, new_health)
-      end)
+  defp reconcile_tracked_sources(state) do
+    Enum.reduce(state.sources, state.sources, fn {source, health}, acc ->
+      path = Path.join(state.dir, source)
+      {_, new_health} = process_file(source, path, health)
+      Map.put(acc, source, new_health)
+    end)
+  end
 
-    # Look for brand-new files that might have been missed.
-    sources =
-      case File.ls(state.dir) do
-        {:ok, files} ->
-          Enum.reduce(files, sources, fn file, acc ->
-            source = file
-            path = Path.join(state.dir, source)
+  defp discover_new_sources(state, sources) do
+    case File.ls(state.dir) do
+      {:ok, files} ->
+        Enum.reduce(files, sources, fn file, acc ->
+          source = file
+          path = Path.join(state.dir, source)
+          try_discover_new_source(path, source, acc)
+        end)
 
-            if File.regular?(path) and not Map.has_key?(acc, source) do
-              health = %SourceHealth{SourceHealth.new(source) | exists?: true, offset: 0}
-              {_, new_health} = process_file(source, path, health)
-              Map.put(acc, source, new_health)
-            else
-              acc
-            end
-          end)
+      {:error, _} ->
+        sources
+    end
+  end
 
-        {:error, _} ->
-          sources
-      end
-
-    %{state | sources: sources}
+  defp try_discover_new_source(path, source, acc) do
+    if File.regular?(path) and not Map.has_key?(acc, source) do
+      health = %SourceHealth{SourceHealth.new(source) | exists?: true, offset: 0}
+      {_, new_health} = process_file(source, path, health)
+      Map.put(acc, source, new_health)
+    else
+      acc
+    end
   end
 
   defp process_file(source, path, health) do
     ingested_at = DateTime.utc_now()
-
     {results, new_offset, meta} = read_and_parse(path, health, source, ingested_at)
 
-    {events, malformed_count, malformed_samples} =
-      Enum.reduce(results, {[], 0, health.malformed_samples}, fn
-        {:ok, event}, {evs, count, samples} ->
-          {[event | evs], count, samples}
-
-        {:malformed, raw, _reason}, {evs, count, samples} ->
-          new_samples =
-            if length(samples) < 3 do
-              [raw | samples]
-            else
-              samples
-            end
-
-          {evs, count + 1, new_samples}
-      end)
-
+    {events, malformed_count, malformed_samples} = classify_results(results, health)
     events = Enum.reverse(events)
 
-    last_event_at =
-      case events do
-        [] -> health.last_event_at
-        [first | _] -> Event.at(first) || ingested_at
-      end
+    result = %{
+      new_offset: new_offset,
+      events: events,
+      malformed_count: malformed_count,
+      malformed_samples: malformed_samples,
+      meta: meta
+    }
 
+    new_health = build_health(source, path, health, ingested_at, result)
+
+    broadcast_results(events, new_health)
+    {events, new_health}
+  end
+
+  defp classify_results(results, health) do
+    Enum.reduce(results, {[], 0, health.malformed_samples}, fn
+      {:ok, event}, {evs, count, samples} ->
+        {[event | evs], count, samples}
+
+      {:malformed, raw, _reason}, {evs, count, samples} ->
+        new_samples =
+          if length(samples) < 3 do
+            [raw | samples]
+          else
+            samples
+          end
+
+        {evs, count + 1, new_samples}
+    end)
+  end
+
+  defp build_health(source, path, health, ingested_at, result) do
     exists? = File.exists?(path)
 
     size =
@@ -298,22 +319,30 @@ defmodule BeamWatch.Ingest.Watcher do
         {:error, _} -> health.size
       end
 
+    last_event_at =
+      case result.events do
+        [] -> health.last_event_at
+        [first | _] -> Event.at(first) || ingested_at
+      end
+
     %SourceHealth{malformed_samples: _, parse_failures: _, rotations: _} = health
 
-    new_health = %SourceHealth{
+    %SourceHealth{
       health
       | source: source,
         exists?: exists?,
         size: size,
-        offset: new_offset,
+        offset: result.new_offset,
         last_read_at: ingested_at,
         last_event_at: last_event_at,
-        parse_failures: health.parse_failures + malformed_count,
-        malformed_samples: malformed_samples,
-        rotations: if(meta == :rotated, do: health.rotations + 1, else: health.rotations),
-        truncated?: meta == :rotated
+        parse_failures: health.parse_failures + result.malformed_count,
+        malformed_samples: result.malformed_samples,
+        rotations: if(result.meta == :rotated, do: health.rotations + 1, else: health.rotations),
+        truncated?: result.meta == :rotated
     }
+  end
 
+  defp broadcast_results(events, new_health) do
     Enum.each(events, fn event ->
       Phoenix.PubSub.broadcast(BeamWatch.PubSub, @pubsub_events, {:beamwatch, :event, event})
     end)
@@ -323,8 +352,6 @@ defmodule BeamWatch.Ingest.Watcher do
       @pubsub_health,
       {:beamwatch, :health, new_health}
     )
-
-    {events, new_health}
   end
 
   # Reads new bytes from `path` starting at `health.offset`, parses them, and
@@ -335,30 +362,29 @@ defmodule BeamWatch.Ingest.Watcher do
 
     case File.stat(path) do
       {:ok, %{size: size}} when size < current_offset ->
-        # File shrank — rotation or truncation.
         data = read_all(path)
         {results, processed} = parse_chunk(data, source, ingested_at)
-        new_offset = processed
-        {results, new_offset, :rotated}
+        {results, processed, :rotated}
 
       {:ok, %{size: size}} when size == current_offset ->
         {[], current_offset, :unchanged}
 
       {:ok, %{size: size}} ->
-        bytes_to_read = size - current_offset
-
-        {:ok, fd} = :file.open(path, [:read, :binary, :raw])
-        {:ok, _} = :file.position(fd, current_offset)
-        {:ok, data} = :file.read(fd, bytes_to_read)
-        :ok = :file.close(fd)
-
+        data = read_file_range(path, current_offset, size - current_offset)
         {results, processed} = parse_chunk(data, source, ingested_at)
-        new_offset = current_offset + processed
-        {results, new_offset, :new_lines}
+        {results, current_offset + processed, :new_lines}
 
       {:error, _} ->
         {[], current_offset, :missing}
     end
+  end
+
+  defp read_file_range(path, offset, bytes_to_read) do
+    {:ok, fd} = :file.open(path, [:read, :binary, :raw])
+    {:ok, _} = :file.position(fd, offset)
+    {:ok, data} = :file.read(fd, bytes_to_read)
+    :ok = :file.close(fd)
+    data
   end
 
   defp read_all(path) do
@@ -373,28 +399,31 @@ defmodule BeamWatch.Ingest.Watcher do
       {[], 0}
     else
       parts = String.split(data, "\n", trim: false)
-
-      {lines, processed_bytes} =
-        if String.ends_with?(data, "\n") do
-          # All lines are complete, though the last part may be empty.
-          lines = Enum.reject(parts, &(&1 == ""))
-          {lines, byte_size(data)}
-        else
-          if length(parts) == 1 do
-            # No complete line at all.
-            {[], 0}
-          else
-            # All parts except the last are complete.
-            complete_parts = Enum.take(parts, length(parts) - 1)
-            lines = Enum.reject(complete_parts, &(&1 == ""))
-            last = List.last(parts)
-            processed = byte_size(data) - byte_size(last)
-            {lines, processed}
-          end
-        end
+      {lines, processed_bytes} = split_lines(data, parts)
 
       results = Enum.map(lines, &Parser.parse(&1, source: source, ingested_at: ingested_at))
       {results, processed_bytes}
+    end
+  end
+
+  defp split_lines(data, parts) do
+    if String.ends_with?(data, "\n") do
+      lines = Enum.reject(parts, &(&1 == ""))
+      {lines, byte_size(data)}
+    else
+      split_incomplete(data, parts)
+    end
+  end
+
+  defp split_incomplete(data, parts) do
+    if length(parts) == 1 do
+      {[], 0}
+    else
+      complete_parts = Enum.take(parts, length(parts) - 1)
+      lines = Enum.reject(complete_parts, &(&1 == ""))
+      last = List.last(parts)
+      processed = byte_size(data) - byte_size(last)
+      {lines, processed}
     end
   end
 end

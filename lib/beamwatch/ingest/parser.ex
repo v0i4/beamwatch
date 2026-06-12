@@ -45,12 +45,10 @@ defmodule BeamWatch.Ingest.Parser do
     raw = strip_eol(line)
     trimmed = String.trim(raw)
 
-    cond do
-      trimmed == "" ->
-        {:malformed, raw, :blank}
-
-      true ->
-        parse_trimmed(trimmed, raw, source, ingested_at)
+    if trimmed == "" do
+      {:malformed, raw, :blank}
+    else
+      parse_trimmed(trimmed, raw, source, ingested_at)
     end
   end
 
