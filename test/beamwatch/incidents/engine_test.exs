@@ -3,17 +3,19 @@ defmodule BeamWatch.Incidents.EngineTest do
 
   alias BeamWatch.Incidents.Engine
   alias BeamWatch.Ingest.Parser
+  alias BeamWatch.LogFeed.Profiles
 
   @topic_events "beamwatch:events"
 
   setup do
+    # credo:disable-for-this-line
     pubsub_name = :"beamwatch_test_#{System.unique_integer([:positive])}"
     start_supervised!({Phoenix.PubSub, name: pubsub_name, pool_size: 1})
     %{pubsub_name: pubsub_name}
   end
 
   defp parse_validation_events do
-    BeamWatch.LogFeed.Profiles.get("validation")
+    Profiles.get("validation")
     |> Enum.map(fn entry ->
       case Parser.parse(entry.line, source: entry.source) do
         {:ok, event} -> {:ok, event}
@@ -33,6 +35,7 @@ defmodule BeamWatch.Incidents.EngineTest do
       {:ok, pid} =
         Engine.start_link(
           pubsub: pubsub_name,
+          # credo:disable-for-this-line
           name: :"engine_test_#{System.unique_integer([:positive])}"
         )
 
@@ -52,6 +55,7 @@ defmodule BeamWatch.Incidents.EngineTest do
       {:ok, pid} =
         Engine.start_link(
           pubsub: pubsub_name,
+          # credo:disable-for-this-line
           name: :"engine_test_#{System.unique_integer([:positive])}"
         )
 
@@ -83,6 +87,7 @@ defmodule BeamWatch.Incidents.EngineTest do
       {:ok, pid} =
         Engine.start_link(
           pubsub: pubsub_name,
+          # credo:disable-for-this-line
           name: :"engine_test_#{System.unique_integer([:positive])}"
         )
 
@@ -108,6 +113,7 @@ defmodule BeamWatch.Incidents.EngineTest do
       {:ok, pid} =
         Engine.start_link(
           pubsub: pubsub_name,
+          # credo:disable-for-this-line
           name: :"engine_test_#{System.unique_integer([:positive])}"
         )
 
@@ -133,6 +139,7 @@ defmodule BeamWatch.Incidents.EngineTest do
       {:ok, pid} =
         Engine.start_link(
           pubsub: pubsub_name,
+          # credo:disable-for-this-line
           name: :"engine_test_#{System.unique_integer([:positive])}"
         )
 

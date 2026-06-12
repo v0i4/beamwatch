@@ -93,6 +93,15 @@ defmodule BeamWatch.Incidents.Engine do
     GenServer.cast(server, {:clear_silence, scope, key})
   end
 
+  @doc """
+  Resets all engine state (incidents, silences, activity, scratch).
+  Useful for test isolation or administrative reset.
+  """
+  @spec clear(GenServer.server()) :: :ok
+  def clear(server \\ __MODULE__) do
+    GenServer.call(server, :clear)
+  end
+
   # ------------------------------------------------------------------
   # Callbacks
   # ------------------------------------------------------------------
@@ -131,6 +140,13 @@ defmodule BeamWatch.Incidents.Engine do
   @impl true
   def handle_call(:snapshot, _from, state) do
     {:reply, state, state}
+  end
+
+  @impl true
+  def handle_call(:clear, _from, state) do
+    state = %{state | incidents: %{}, silences: %{}, recent_activity: [], detector_scratch: %{}}
+    broadcast_update(state)
+    {:reply, :ok, state}
   end
 
   @impl true

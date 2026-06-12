@@ -15,6 +15,7 @@ defmodule BeamWatch.Ingest.WatcherTest do
   end
 
   defp start_watcher(dir) do
+    # credo:disable-for-this-line
     name = :"test_watcher_#{System.unique_integer([:positive])}"
     {:ok, pid} = Watcher.start_link(dir: dir, reconcile_interval: 60_000, name: name)
     pid
