@@ -105,7 +105,10 @@ defmodule BeamWatch.MixProject do
         "credo --strict",
         "ex_dna",
         "sobelow --exit",
-        "dialyzer",
+        "dialyzer"
+      ],
+      "precommit.full": [
+        "precommit",
         "coveralls"
       ]
     ]
