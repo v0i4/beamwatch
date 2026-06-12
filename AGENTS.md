@@ -25,6 +25,7 @@ mix test
 - **Router**: `GET /` → `BeamWatchWeb.DashboardLive` (`lib/beamwatch_web/router.ex:20`)
 - **Entrypoint**: `BeamWatch.Application` (`lib/beamwatch/application.ex`)
 - **Domain**: `lib/beamwatch/` — business logic, log ingestion
+- **Incident detectors**: `lib/beamwatch/incidents/detectors/` — four detector modules implementing `BeamWatch.Incidents.Detector` behaviour, wired in `engine.ex`
 - **Log feeder**: `lib/beamwatch/log_feed/` — deterministic fixture generator (Mix task + dev controls)
 - **Web**: `lib/beamwatch_web/` — LiveView, components, router
 - **No database / no Ecto** — state is in-memory, sourced from log files at `priv/logs/`
