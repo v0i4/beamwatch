@@ -144,17 +144,13 @@ defmodule BeamWatchWeb.DashboardLive do
     end
   end
 
-  def handle_event("filter-changed", %{"filter" => params}, socket) do
-    current = socket.assigns.filters
+  def handle_event("filter-changed", params, socket) do
+    fp = Map.get(params, "filter", %{})
 
     filters = %{
-      status: if(params["status"], do: parse_filter_list(params["status"]), else: current.status),
-      severity:
-        if(params["severity"],
-          do: parse_filter_list(params["severity"]),
-          else: current.severity
-        ),
-      type: if(params["type"], do: parse_filter_list(params["type"]), else: current.type)
+      status: parse_filter_list(Map.get(fp, "status", [])),
+      severity: parse_filter_list(Map.get(fp, "severity", [])),
+      type: parse_filter_list(Map.get(fp, "type", []))
     }
 
     {:noreply, assign(socket, filters: filters)}
