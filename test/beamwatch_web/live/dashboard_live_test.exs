@@ -217,8 +217,7 @@ defmodule BeamWatchWeb.DashboardLiveTest do
     {:ok, view, _html} = live(conn, ~p"/")
     Process.sleep(50)
 
-    html = render(view)
-    assert html =~ "Container Restart Loop"
+    assert render(view) =~ "Show evidence"
 
     view
     |> element(~s|form[phx-change="filter-changed"]|)
@@ -227,7 +226,7 @@ defmodule BeamWatchWeb.DashboardLiveTest do
     Process.sleep(100)
 
     html = render(view)
-    assert html =~ "Container Restart Loop"
+    assert html =~ "Show evidence"
   end
 
   test "clear filters button appears when filters are active", %{conn: conn} do
@@ -262,6 +261,143 @@ defmodule BeamWatchWeb.DashboardLiveTest do
 
     html = render(view)
     refute html =~ "Clear all filters"
+  end
+
+  test "filter by severity", %{conn: conn} do
+    feed_container_restart_events("plex")
+    {:ok, view, _html} = live(conn, ~p"/")
+    Process.sleep(50)
+
+    view
+    |> element(~s|form[phx-change="filter-changed"]|)
+    |> render_change(%{"filter" => %{"severity" => ["high"]}})
+
+    Process.sleep(100)
+
+    html = render(view)
+    assert html =~ "Show evidence"
+  end
+
+  test "filter by type", %{conn: conn} do
+    feed_container_restart_events("plex")
+    {:ok, view, _html} = live(conn, ~p"/")
+    Process.sleep(50)
+
+    view
+    |> element(~s|form[phx-change="filter-changed"]|)
+    |> render_change(%{"filter" => %{"type" => ["container_restart_loop"]}})
+
+    Process.sleep(100)
+
+    html = render(view)
+    assert html =~ "Show evidence"
+  end
+
+  test "filter hides non-matching status", %{conn: conn} do
+    feed_container_restart_events("plex")
+    {:ok, view, _html} = live(conn, ~p"/")
+    Process.sleep(50)
+
+    assert render(view) =~ "Show evidence"
+
+    view
+    |> element(~s|form[phx-change="filter-changed"]|)
+    |> render_change(%{"filter" => %{"status" => ["resolved"]}})
+
+    Process.sleep(100)
+
+    html = render(view)
+    refute html =~ "Show evidence"
+    assert html =~ "No incidents matching your filters"
+  end
+
+  test "filter hides non-matching severity", %{conn: conn} do
+    feed_container_restart_events("plex")
+    {:ok, view, _html} = live(conn, ~p"/")
+    Process.sleep(50)
+
+    view
+    |> element(~s|form[phx-change="filter-changed"]|)
+    |> render_change(%{"filter" => %{"severity" => ["medium"]}})
+
+    Process.sleep(100)
+
+    html = render(view)
+    refute html =~ "Show evidence"
+    assert html =~ "No incidents matching your filters"
+  end
+
+  test "filter hides non-matching type", %{conn: conn} do
+    feed_container_restart_events("plex")
+    {:ok, view, _html} = live(conn, ~p"/")
+    Process.sleep(50)
+
+    view
+    |> element(~s|form[phx-change="filter-changed"]|)
+    |> render_change(%{"filter" => %{"type" => ["disk_smart_warning"]}})
+
+    Process.sleep(100)
+
+    html = render(view)
+    refute html =~ "Show evidence"
+    assert html =~ "No incidents matching your filters"
+  end
+
+  test "filter by multiple status values", %{conn: conn} do
+    feed_container_restart_events("plex")
+    {:ok, view, _html} = live(conn, ~p"/")
+    Process.sleep(50)
+
+    view
+    |> element(~s|form[phx-change="filter-changed"]|)
+    |> render_change(%{"filter" => %{"status" => ["active", "acknowledged"]}})
+
+    Process.sleep(100)
+
+    html = render(view)
+    assert html =~ "Show evidence"
+  end
+
+  test "filter by cross-group matching all", %{conn: conn} do
+    feed_container_restart_events("plex")
+    {:ok, view, _html} = live(conn, ~p"/")
+    Process.sleep(50)
+
+    view
+    |> element(~s|form[phx-change="filter-changed"]|)
+    |> render_change(%{
+      "filter" => %{
+        "status" => ["active"],
+        "severity" => ["high"],
+        "type" => ["container_restart_loop"]
+      }
+    })
+
+    Process.sleep(100)
+
+    html = render(view)
+    assert html =~ "Show evidence"
+  end
+
+  test "filter by cross-group partial match hides incident", %{conn: conn} do
+    feed_container_restart_events("plex")
+    {:ok, view, _html} = live(conn, ~p"/")
+    Process.sleep(50)
+
+    view
+    |> element(~s|form[phx-change="filter-changed"]|)
+    |> render_change(%{
+      "filter" => %{
+        "status" => ["active"],
+        "severity" => ["medium"]
+      }
+    })
+
+    Process.sleep(100)
+
+    html = render(view)
+    refute html =~ "Show evidence"
+    assert html =~ "No incidents matching your filters"
   end
 
   test "bulk acknowledge action", %{conn: conn} do
